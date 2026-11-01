@@ -1,0 +1,101 @@
+name: Release
+
+# 触发方式：
+#   1) 在 GitHub 上创建 / 发布 Release（推荐）
+#   2) 推送 tag：git push origin v1.0.0
+#   3) 手动运行本工作流并填一个已存在的 tag
+on:
+  release:
+    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已存在的 tag（例如 v1.0.0）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 打包并发布
+    runs-on: macos-14
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: 解析版本号
+        id: ver
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "==> 版本 $VERSION（tag $TAG）"
+
+      - name: 显示工具链
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+
+      - name: 构建
+        run: |
+          chmod +x build.sh scripts/package.sh
+          ./build.sh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: 打包 DMG / ZIP
+        run: ./scripts/package.sh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+
+      - name: 发布到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: 7-Zip File Manager ${{ steps.ver.outputs.version }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.sha256
+          body: |
+            ## 7-Zip File Manager for macOS ${{ steps.ver.outputs.version }}
+
+            原生 macOS 图形界面，内置官方 7-Zip ${{ steps.ver.outputs.version }} 之外的 `7zz` 引擎（26.05，通用二进制）。
+
+            ### 安装
+
+            1. 下载 `7-Zip-File-Manager-${{ steps.ver.outputs.version }}.dmg`
+            2. 打开后把 **7-Zip File Manager** 拖进 Applications
+            3. 首次启动：右键图标 →「打开」，或到「系统设置 → 隐私与安全性」点「仍要打开」
+
+            > 本版本使用 ad-hoc 签名（未做 Apple 公证），所以首次打开会有 Gatekeeper 提示。
+            > 等不及提示也可以执行：
+            > ```
+            > xattr -dr com.apple.quarantine "/Applications/7-Zip File Manager.app"
+            > ```
+
+            ### 说明
+
+            - 支持格式：7z / zip / tar / gz / bz2 / xz / zst / rar（解压）/ iso / cab / jar 等
+            - 本项目源码 MIT；内置 `7zz` 为 GNU LGPL 2.1+（含 unRAR 限制），详见 `THIRD-PARTY-NOTICES.md`
+            - 完整校验和见 `*.sha256` 附件

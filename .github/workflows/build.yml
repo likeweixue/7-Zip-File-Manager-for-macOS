@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 编译 macOS 应用
+    runs-on: macos-14
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 显示工具链
+        run: |
+          xcodebuild -version
+          swift --version
+          sw_vers
+
+      - name: 构建
+        run: |
+          chmod +x build.sh scripts/package.sh
+          ./build.sh
+        env:
+          VERSION: 0.0.0-dev
+          BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: 打包
+        run: ./scripts/package.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7-Zip-File-Manager-dev
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
