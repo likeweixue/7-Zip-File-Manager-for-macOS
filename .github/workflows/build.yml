@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: 编译 macOS 应用
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: 检出代码

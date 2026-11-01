@@ -22,7 +22,7 @@ permissions:
 jobs:
   release:
     name: 打包并发布
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: 检出代码
